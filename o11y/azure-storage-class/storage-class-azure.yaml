@@ -1,0 +1,11 @@
+kind: StorageClass
+metadata:
+  name: o11y-gp3-storage
+parameters:
+  skuName: Standard_LRS               # Azure Managed Disk SKU (Premium or Standard)
+  csi.storage.k8s.io/fstype: ext4     # Filesystem type for the volume (ext4 is commonly used)
+provisioner: disk.csi.azure.com        # Azure CSI Provisioner
+reclaimPolicy: Retain                  # Retain the volume after PVC deletion
+volumeBindingMode: WaitForFirstConsumer  # Only bind the volume when a pod is scheduled
+allowVolumeExpansion: true             # Allow volume expansion
+apiVersion: storage.k8s.io/v1
