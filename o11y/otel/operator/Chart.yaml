@@ -1,0 +1,11 @@
+apiVersion: v2
+name: otel-operator
+description: A Helm chart for Opentelemetry Operator
+type: application
+version: 1.0.1
+appVersion: 1.49.0
+dependencies:
+  - name: otel-operator
+    version: 1.0.1
+    repository: https://ot-container-kit.github.io/helm-charts
+    alias: otel-operator

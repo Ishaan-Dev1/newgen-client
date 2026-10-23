@@ -1,0 +1,16 @@
+namespace: monitoring
+
+endpoints:
+  jobName: blackbox
+  path: /probe
+  scheme: http
+  module: http_2xx
+  replacement: blackbox.monitoring.svc.cluster.local:9115
+  targets:
+    - https://230792newgenoneautomationstudiodev.nonprodnmc.com/automationstudio/
+    - https://dev-documents-na.qbe.com/omnidocs/web
+    - https://dev-documents-na.qbe.com/omnidocs/admin
+    - https://dev-documents-na.qbe.com/rms/web
+    - https://dev-documents-na.qbe.com/rms/admin
+    - https://dev-documents-na.qbe.com/omniscanweb
+    - https://dev-documents-na.qbe.com/workspacestudio/

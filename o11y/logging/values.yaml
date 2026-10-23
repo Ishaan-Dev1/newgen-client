@@ -1,0 +1,141 @@
+logging-standalone:
+  standalone:
+    # nameOverride: standalone
+    loki:
+      limits_config:
+        retention_period: 7d
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+        max_cache_freshness_per_query: 10m
+        split_queries_by_interval: 15m
+        per_stream_rate_limit: 512M
+        per_stream_rate_limit_burst: 1024M
+        cardinality_limit: 200000
+        ingestion_burst_size_mb: 1000
+        ingestion_rate_mb: 10000
+        max_entries_limit_per_query: 1000000
+        max_label_value_length: 20480
+        max_label_name_length: 10240
+        max_label_names_per_series: 300
+      compactor:
+        working_directory: /var/loki/compactor
+        compaction_interval: 10m
+        retention_enabled: true
+        delete_request_store: filesystem
+        retention_delete_delay: 2h
+      storage:
+        type: filesystem
+      auth_enabled: false
+      commonConfig:
+        replication_factor: 1
+      schemaConfig:
+        configs:
+          - from: 2024-04-01
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+      storage_config:
+        tsdb_shipper:
+          active_index_directory: /var/loki/index
+          cache_location: /var/loki/index_cache
+          cache_ttl: 336h
+      ingester:
+        chunk_encoding: snappy
+      querier:
+        max_concurrent: 2
+    serviceAccount:
+      create: true
+      name: loki-sa
+    deploymentMode: SingleBinary
+    singleBinary:
+      replicas: 1
+      resources:
+        requests:
+          cpu: "500m"
+          memory: 1Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
+      persistence:
+        enabled: true
+        enableStatefulSetAutoDeletePVC: false
+        size: 100Gi
+        storageClass: o11y-gp3-storage
+      extraEnv:
+        - name: GOMEMLIMIT
+          value: 2200MiB
+      extraArgs:
+        - "-config.expand-env=true"
+    gateway:
+      enabled: true
+
+    memcachedExporter:
+      enabled: true
+    memcached:
+      enabled: true
+    chunksCache:
+      enabled: true
+    resultsCache:
+      enabled: true
+
+logging-agent:
+  fluent-bit:
+    kind: DaemonSet
+    nameOverride: fluentbit
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 64Mi
+    config:
+      service: |
+        [SERVICE]
+            Flush             5
+            Daemon            Off
+            Log_Level         info
+            Parsers_File      parsers.conf
+            HTTP_Server       On
+            HTTP_Listen       0.0.0.0
+            HTTP_Port         2020
+            dns.mode          tcp
+            dns.resolver      ASYNC
+            dns.prefer_ipv4   on
+
+      inputs: |
+        [INPUT]
+            Name             tail
+            Path             /var/log/containers/*.log
+            Parser           docker,cri
+            Tag              kube.*
+            Refresh_Interval 5
+            Rotate_Wait      30
+            Mem_Buf_Limit    5MB
+            Skip_Long_Lines  On
+            DB               /fluent-bit/state/flb_kube.db
+            Ignore_Older     4h
+            multiline.parser docker,cri
+
+      filters: |
+        [FILTER]
+            Name                kubernetes
+            Match               kube.*
+            K8S-Logging.Parser  On
+            K8S-Logging.Exclude Off
+            Keep_Log            On
+            Merge_Log           On
+
+      outputs: |
+        [OUTPUT]
+            Name              loki
+            Match             *
+            host              logging-loki-gateway.logging.svc.cluster.local
+            port              80
+            drop_single_key   on
+            labels            namespace=$kubernetes['namespace_name'],container=$kubernetes['container_name'],service_name=$kubernetes['labels']['app']
+            remove_keys       kubernetes
+            Compress          gzip

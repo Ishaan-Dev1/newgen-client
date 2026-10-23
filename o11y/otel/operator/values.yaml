@@ -1,0 +1,4 @@
+otel-operator:
+  operator:
+    enabled: true
+    replicaCount: 1

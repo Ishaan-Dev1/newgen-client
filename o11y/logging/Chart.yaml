@@ -1,0 +1,19 @@
+apiVersion: v2
+appVersion: 3.6
+dependencies:
+- alias: logging-agent
+  name: fluent-bit
+  repository: https://ot-container-kit.github.io/helm-charts
+  version: 0.0.3
+  tags:
+    - logging
+- alias: logging-standalone
+  name: loki-standalone
+  repository: https://ot-container-kit.github.io/helm-charts
+  version: 1.0.2
+  tags:
+    - logging
+description: A Helm chart for loki
+name: loki
+type: application
+version: 1.0.2

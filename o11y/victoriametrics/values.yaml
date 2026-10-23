@@ -1,0 +1,410 @@
+vm-standalone:
+  vm:
+
+    # -- VM Operator
+    victoria-metrics-operator:
+      enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 300Mi
+      # -- Disable webhook during upgrade to avoid 502 race condition
+      operator:
+        args:
+          - --webhook.enable=false # make it true after upgrade, this is just required for upgrading cluster causing 502 errors due to webhooks
+      # -- Override env vars from base chart to fix typo and remove duplicate
+      env:
+        # -- Fix: corrected typo victoriamertics → victoriametrics
+        - name: VM_VMSINGLEDEFAULT_IMAGE
+          value: "docker.io/victoriametrics/victoria-metrics"
+        # -- Fix: removed duplicate entry, corrected version to match vmagent/vmalert
+        - name: VM_VMSINGLEDEFAULT_VERSION
+          value: "v1.141.0"
+        - name: VM_VMAGENTDEFAULT_IMAGE
+          value: "opstree/victoriametrics-vmagent"
+        - name: VM_VMAGENTDEFAULT_VERSION
+          value: "v1.141.0"
+        - name: VM_VMALERTDEFAULT_IMAGE
+          value: "opstree/victoriametrics-vmalert"
+        - name: VM_VMALERTDEFAULT_VERSION
+          value: "v1.141.0"
+        - name: VM_VMALERTMANAGER_ALERTMANAGERDEFAULTBASEIMAGE
+          value: "opstree/alertmanager"
+        - name: VM_VMALERTMANAGER_ALERTMANAGERVERSION
+          value: "v0.32.0"
+        - name: VM_CONFIG_RELOADER_IMAGE
+          value: "opstree/victoriametrics-operator:config-reloader-v0.69.0"
+        # -- upstream images — not yet hardened
+        - name: VM_VLOGSDEFAULT_IMAGE
+          value: "victoriametrics/victoria-logs"
+        - name: VM_VMCLUSTERDEFAULT_VMSELECTDEFAULT_IMAGE
+          value: "victoriametrics/vmselect"
+        - name: VM_VMCLUSTERDEFAULT_VMSTORAGEDEFAULT_IMAGE
+          value: "victoriametrics/vmstorage"
+        - name: VM_VMCLUSTERDEFAULT_VMINSERTDEFAULT_IMAGE
+          value: "victoriametrics/vminsert"
+        - name: VM_VMBACKUP_IMAGE
+          value: "victoriametrics/vmbackupmanager"
+        - name: VM_VMAUTHDEFAULT_IMAGE
+          value: "victoriametrics/vmauth"
+        # -- Operator configuration
+        - name: VM_USECUSTOMCONFIGRELOADER
+          value: "true"
+        - name: VM_CONFIG_RELOADER_REQUEST_CPU
+          value: "unlimited"
+        - name: VM_CONFIG_RELOADER_REQUEST_MEMORY
+          value: "unlimited"
+        - name: VM_CONFIG_RELOADER_LIMIT_CPU
+          value: "unlimited"
+        - name: VM_CONFIG_RELOADER_LIMIT_MEMORY
+          value: "unlimited"
+        - name: VM_VMAGENTDEFAULT_USEDEFAULTRESOURCES
+          value: "false"
+        - name: VM_VMALERTMANAGER_USEDEFAULTRESOURCES
+          value: "false"
+        - name: VM_CONTAINERREGISTRY
+          value: "quay.io"
+        # -- Prometheus Converters
+        - name: VM_ENABLEDPROMETHEUSCONVERTER_PODMONITOR
+          value: "false"
+        - name: VM_ENABLEDPROMETHEUSCONVERTER_SERVICESCRAPE
+          value: "true"
+        - name: VM_ENABLEDPROMETHEUSCONVERTER_PROMETHEUSRULE
+          value: "false"
+        - name: VM_ENABLEDPROMETHEUSCONVERTER_PROBE
+          value: "false"
+        - name: VM_ENABLEDPROMETHEUSCONVERTER_ALERTMANAGERCONFIG
+          value: "false"
+        - name: VM_ENABLEDPROMETHEUSCONVERTER_SCRAPECONFIG
+          value: "false"
+
+    # -- Grafana
+    grafana:
+      enabled: true
+      adminUser: admin
+      adminPassword: newgen123
+      resources:
+        requests:
+          cpu: "100m"
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+      persistence:
+        enabled: true
+        type: sts
+        # -- Fix: corrected from standard (did not exist in cluster) to o11y-gp3-storage
+        storageClassName: o11y-gp3-storage
+        accessModes:
+          - ReadWriteOnce
+        size: 1Gi
+        finalizers:
+          - kubernetes.io/pvc-protection
+      service:
+        enabled: true
+        type: NodePort
+        port: 3000
+        targetPort: 3000
+
+    # -- Grafana Datasources
+    defaultDatasources:
+      victoriametrics:
+        datasources:
+          - name: VictoriaMetrics
+            type: prometheus
+            access: proxy
+            uid: VictoriaMetrics
+            isDefault: true
+            editable: false
+            url: http://vmsingle-vm.monitoring.svc.cluster.local:8428
+            jsonData:
+              httpMethod: GET
+              exemplars: true
+      alertmanager:
+        datasources:
+          - name: Alertmanager
+            access: proxy
+            uid: Alertmanager
+            jsonData:
+              implementation: prometheus
+      extra:
+        - name: Tempo
+          type: tempo
+          uid: Tempo
+          url: http://tempo.observability.svc.cluster.local.:3100
+          access: proxy
+          jsonData:
+            handleGrafanaManagedAlerts: false
+            implementation: prometheus
+            nodeGraph:
+              enabled: true
+            search:
+              hide: false
+            lokiSearch:
+              datasourceUid: product-mx-tx-log
+            tracesToLogs:
+              datasourceUid: product-mx-tx-log
+              filterBySpanID: false
+              filterByTraceID: true
+              mapTagNamesEnabled: false
+              tags:
+                - app
+          readOnly: false
+          editable: false
+
+        - name: infra-eks-log
+          orgId: 1
+          uid: infra-eks-log
+          type: loki
+          access: proxy
+          url: http://logging-loki-gateway.logging.svc.cluster.local.:80
+          basicAuth: true
+          basicAuthUser: infra-eks-log
+          secureJsonData:
+            httpHeaderValue1: infra-eks-log
+            basicAuthPassword: infra-eks-log
+          database: ''
+          isDefault: false
+          jsonData:
+            httpHeaderName1: 'X-Scope-OrgID'
+            derivedFields:
+              - datasourceUid: Tempo
+                matcherRegex: (?:trace_id)=(\w+)
+                name: TraceID
+                url: $${__value.raw}
+          readOnly: false
+          editable: false
+
+        - uid: product-mx-tx-log
+          orgId: 1
+          name: product-mx-tx-log
+          type: loki
+          access: proxy
+          url: http://logging-loki-gateway.logging.svc.cluster.local.:80
+          basicAuth: true
+          basicAuthUser: product-mx-tx-log
+          secureJsonData:
+            httpHeaderValue1: product-mx-tx-log
+            basicAuthPassword: product-mx-tx-log
+          database: ''
+          isDefault: false
+          jsonData:
+            httpHeaderName1: 'X-Scope-OrgID'
+            derivedFields:
+              - datasourceUid: Tempo
+                matcherRegex: (?:trace_id)=(\w+)
+                name: TraceID
+                url: $${__value.raw}
+          readOnly: false
+          editable: false
+
+    # -- Alertmanager
+    alertmanager:
+      enabled: true
+      config:
+        global:
+          resolve_timeout: 5m
+        templates:
+          - "/etc/vm/configs/**/*.tmpl"
+        route:
+          receiver: "blackhole"
+        receivers:
+          - name: blackhole
+      spec:
+        configNamespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+        replicaCount: 1
+        retention: 240h
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 500Mi
+        tolerations:
+          - key: team
+            operator: Equal
+            value: "o11y"
+            effect: NoSchedule
+        nodeSelector:
+          team: o11y
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: o11y-gp3-storage
+              accessModes:
+                - "ReadWriteOnce"
+              resources:
+                requests:
+                  storage: 1Gi
+        securityContext:
+          runAsUser: 65534
+          runAsGroup: 65534
+          fsGroup: 65534
+      monzoTemplate:
+        enabled: false
+      templateFiles:
+        opstree-alert-template.tmpl: |-
+          {{/* Alertmanager Silence link */}}
+          {{ define "__alert_silence_link" -}}
+            {{ .ExternalURL }}/#/silences/new?filter=%7B
+            {{- range .CommonLabels.SortedPairs -}}
+              {{- if ne .Name "alertname" -}}
+                {{- .Name }}%3D"{{- .Value | urlquery -}}"%2C%20
+              {{- end -}}
+            {{- end -}}
+            alertname%3D"{{- .CommonLabels.alertname -}}"%7D
+          {{- end }}
+
+          {{/* Severity of the alert */}}
+          {{ define "__alert_severity" -}}
+              {{- if eq .CommonLabels.severity "critical" -}}
+              • *severity:* `critical`
+              {{- else if eq .CommonLabels.severity "warning" -}}
+              • *severity:* `warning`
+              {{- else if eq .CommonLabels.severity "info" -}}
+              • *severity:* `info`
+              {{- else -}}
+              • *severity:* :question: {{ .CommonLabels.severity }}
+              {{- end }}
+          {{- end }}
+
+          {{ define "__alert_severity_prefix_title" -}}
+              {{ if ne .Status "firing" -}}
+              :white_check_mark:
+              {{- else if eq .CommonLabels.severity "critical" -}}
+              :fire:
+              {{- else if eq .CommonLabels.severity "warning" -}}
+              :warning:
+              {{- else if eq .CommonLabels.severity "info" -}}
+              :information_source:
+              {{- else -}}
+              :question:
+              {{- end }}
+          {{- end }}
+
+          {{/* Title of the Slack alert */}}
+          {{ define "slack.title" -}}
+            [{{ .Status | toUpper -}}
+            {{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{- end -}}
+            ] {{ template "__alert_severity_prefix_title" . }} {{ .CommonLabels.alertname }} | {{ .CommonLabels.env }} 
+          {{- end }}
+
+          {{/* Color of Slack attachment (appears as line next to alert )*/}}
+          {{ define "slack.color" -}}
+            {{ if eq .Status "firing" -}}
+              {{ if eq .CommonLabels.severity "warning" -}}
+                warning
+              {{- else if eq .CommonLabels.severity "critical" -}}
+                danger
+              {{- else -}}
+                #439FE0
+              {{- end }}
+            {{ else -}}
+            good
+            {{- end }}
+          {{- end }}
+
+          {{/* The text to display in the alert */}}
+          {{ define "slack.text" -}}
+            {{ template "__alert_severity" . }}
+            
+            {{- if (index .Alerts 0).Annotations.summary }}
+            • *summary:* `{{ (index .Alerts 0).Annotations.summary }}`
+            {{- end }}
+
+            {{- if (index .Alerts 0).Annotations.description }}
+            • *Status:* `{{ (index .Alerts 0).Annotations.description }}`  
+            {{- end }}
+
+            {{- if .CommonLabels.namespace }}
+            • *namespace:* `{{ .CommonLabels.namespace }}`  
+            {{- end }}
+
+            {{- if .CommonLabels.env }}
+            • *env:* `{{ .CommonLabels.env }}`  
+            {{- end }}
+
+            {{- if .CommonLabels.container }}
+            • *service:* `{{ .CommonLabels.container }}`  
+            {{- end }}
+
+            {{- if .CommonLabels.pod }}
+            • *pod:* `{{ .CommonLabels.pod }}`  
+            {{- end }}
+
+            *Details:*
+            {{ range .CommonLabels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`  
+            {{ end }}
+          {{- end }}
+
+    # -- VMSingle
+    vmsingle:
+      enabled: true
+      spec:
+        storage:
+          # -- Fix: corrected from standard (did not exist in cluster) to o11y-gp3-storage
+          storageClassName: o11y-gp3-storage
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "0.1"
+            memory: 1Gi
+
+    # -- VMAgent
+    vmagent:
+      enabled: true
+      spec:
+        extraArgs:
+          promscrape.maxScrapeSize: 200MB
+          promscrape.streamParse: "true"
+          promscrape.dropOriginalLabels: "true"
+          remoteWrite.label: k8s_cluster=Dev,env=Dev
+        resources:
+          limits:
+            cpu: "0.5"
+            memory: 500Mi
+          requests:
+            cpu: "0.05"
+            memory: 128Mi
+        scrapeInterval: 30s
+
+    # -- VMAlert
+    vmalert:
+      enabled: true
+      spec:
+        resources:
+          limits:
+            cpu: "0.5"
+            memory: 500Mi
+          requests:
+            cpu: "0.05"
+            memory: 128Mi
+
+    # -- Kube State Metrics
+    kube-state-metrics:
+      resources:
+        limits:
+          cpu: "1"
+          memory: 0.5Gi
+        requests:
+          cpu: 0.05
+          memory: 128Mi
+
+    defaultRules:
+      create: false
+
+    vmcluster:
+      enabled: false
+
+  # -- Prometheus Operator CRDs
+  # Disabled — VM operator handles CRDs via crds/ directory in this chart
+  prometheus-operator-crds:
+    enabled: false

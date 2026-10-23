@@ -1,0 +1,13 @@
+apiVersion: v2
+appVersion: 2.10.4
+dependencies:
+- alias: traces
+  name: tempo-standalone
+  repository: https://ot-container-kit.github.io/helm-charts
+  tags:
+  - tempo
+  version: 1.0.1
+description: A Helm chart for tempo standalone
+name: tempo-standalone
+type: application
+version: 1.0.0

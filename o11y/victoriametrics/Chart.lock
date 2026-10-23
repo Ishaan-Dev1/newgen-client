@@ -1,0 +1,6 @@
+dependencies:
+- name: vm-standalone
+  repository: https://ot-container-kit.github.io/helm-charts
+  version: 0.0.3
+digest: sha256:66efc7b461bcb88ce294791279ea748b4f3d0fa67653e2a1d180eb89420c8868
+generated: "2026-06-01T16:00:09.624979425+05:30"

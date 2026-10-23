@@ -1,0 +1,20 @@
+traces:
+  tempo:
+    fullnameOverride: tempo
+    tempo:
+      retention: 24h
+      memBallastSizeMbs: 2048
+      resources:
+        requests:
+          cpu: 100m
+          memory: "1Gi"
+        limits:
+          cpu: 2
+          memory: "4Gi"
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClassName: o11y-gp3-storage
+      enableStatefulSetAutoDeletePVC: false
+      accessModes:
+        - ReadWriteOnce
